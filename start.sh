@@ -1,17 +1,13 @@
 #!/bin/bash
 
 # IntentLock Startup Script
-# Starts the improved Node.js backend with full semantic analysis
+# Starts the Python backend with Gemini AI integration for contract generation
 
-echo "🚀 Starting IntentLock with Enhanced Drift Detection..."
+echo "🚀 Starting IntentLock with Gemini AI Contract Generation..."
+echo ""
 
 # Navigate to backend directory
 cd backend
 
-# Start the improved Node.js server with full semantic analysis on port 3000
-node server-improved.js
-
-echo ""
-echo "🖥️  Open dashboard/index-improved.html in your browser"
-echo "📋 Backend running with improved analyzers (analyzer-improved.js + driftDetector-improved.js)"
-echo ""
+# Start the Python backend using conda environment
+conda run -n intentlock python main.py

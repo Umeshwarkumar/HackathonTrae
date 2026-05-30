@@ -1,169 +1,195 @@
 /**
- * FastAPI Backend (Updated with Enhanced Logging)
- * Note: This is Node.js version for testing - actual backend is in Python
- * 
- * Improvements:
- * - Automatic forbidden_actions inclusion
- * - Comprehensive logging at all endpoints
- * - Better error handling
- * - Request/response tracking
+ * IntentLock Simplified Backend Server
+ * With Gemini Pro API integration for contract generation (direct HTTP)
  */
 
+const path = require('path');
 const express = require('express');
+const https = require('https');
 const { analyzeBehavior } = require('../analyzer/analyzer-improved');
 const { detectDrift } = require('../analyzer/driftDetector-improved');
+
+// Load environment variables from the backend/.env file
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 app.use(express.json());
 
-// Simple request logging middleware
+// Initialize Gemini API
+const apiKey = process.env.GEMINI_API_KEY;
+if (!apiKey) {
+  console.warn('⚠️  GEMINI_API_KEY not set. Contract generation will use defaults.');
+  console.warn('Set GEMINI_API_KEY environment variable to enable AI-powered contract generation.');
+} else {
+  console.log('✅ GEMINI_API_KEY loaded:', apiKey.substring(0, 20) + '...');
+}
+console.log('✅ Using direct HTTP API calls to Gemini Pro');
+
+// Helper function to call Gemini Pro API via direct HTTP
+async function callGeminiPro(prompt) {
+  return new Promise((resolve, reject) => {
+    const systemInstruction = `You are an intent contract generator. Given a developer's prompt, generate ONLY a valid JSON contract with these fields:
+- allowed_routes (array of API paths like /auth/login, /api/users)
+- allowed_methods (array from: GET, POST, PUT, DELETE)
+- allowed_dependencies (array of npm packages)
+- allowed_domains (array of external domains)
+- forbidden_actions (array from: file_system_access, outbound_network_calls, child_process_execution, hardcoded_secrets, unauthorized_db_access)
+- intent_constraints (object with max_risk_level: HIGH/MEDIUM/LOW)
+
+IMPORTANT: Return ONLY valid JSON, no markdown, no explanation.`;
+
+    const fullPrompt = `${systemInstruction}\n\nUser prompt: ${prompt}`;
+
+    const postData = JSON.stringify({
+      contents: [{ parts: [{ text: fullPrompt }] }]
+    });
+
+    const options = {
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      },
+      timeout: 30000
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          console.log('Response status:', res.statusCode);
+          console.log('Response data:', data.substring(0, 200));
+          const parsed = JSON.parse(data);
+          if (parsed.candidates && parsed.candidates[0] && parsed.candidates[0].content) {
+            const responseText = parsed.candidates[0].content.parts[0].text.trim();
+            resolve(responseText);
+          } else {
+            console.error('Response structure:', JSON.stringify(parsed, null, 2).substring(0, 300));
+            reject(new Error('Invalid Gemini response structure'));
+          }
+        } catch (e) {
+          console.error('Parse error:', e.message);
+          console.error('Raw data:', data);
+          reject(e);
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      console.error('Request error type:', err.constructor.name);
+      console.error('Request error message:', err.message);
+      console.error('Request error code:', err.code);
+      reject(err);
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+
+// Enable CORS for all routes
 app.use((req, res, next) => {
-  console.log(`\n[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  console.log(`  Body: ${JSON.stringify(req.body).substring(0, 100)}...`);
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
   next();
 });
 
 // ====================================================================
-// GENERATE CONTRACT ENDPOINT (Enhanced)
+// GENERATE CONTRACT ENDPOINT - Using Gemini Pro (Direct HTTP)
 // ====================================================================
 app.post('/generate-contract', async (req, res) => {
-  console.log('\n' + '='.repeat(70));
-  console.log('📋 POST /generate-contract');
-  console.log('='.repeat(70));
-
+  console.log('🔥 /generate-contract endpoint called');
   try {
     const { prompt, intent_name } = req.body;
+    console.log('Received prompt:', prompt.substring(0, 50));
     
     if (!prompt) {
-      console.log('  ❌ Error: Missing prompt');
       return res.status(400).json({ error: 'Missing prompt' });
     }
 
-    console.log(`  Intent: "${intent_name || 'unnamed'}"`);
-    console.log(`  Prompt: "${prompt.substring(0, 80)}..."`);
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Gemini API key not configured' });
+    }
 
-    // Default secure contract with automatic forbidden_actions
-    const defaultContract = {
-      intent_name: intent_name || 'unnamed',
-      prompt: prompt,
-      version: '1.0',
-      timestamp: new Date().toISOString(),
+    try {
+      console.log('📞 Calling Gemini Pro API (direct HTTP)...');
+      console.log('API Key length:', apiKey.length);
+      console.log('Prompt length:', prompt.length);
+      const responseText = await callGeminiPro(prompt);
       
-      // AUTOMATIC FORBIDDEN ACTIONS (Default to secure)
-      forbidden_actions: [
-        'outbound_network_calls',
-        'file_system_access',
-        'child_process_execution',
-        'hardcoded_secrets',
-        'unauthorized_db_access'
-      ],
-
-      // DEFAULT CONSTRAINTS (Strict)
-      intent_constraints: {
-        allow_bulk_operations: false,
-        allow_recursive_delete: false,
-        allow_shell_execution: false,
-        allow_external_network_calls: false,
-        allow_privilege_escalation: false,
-        allow_admin_assignment: false,
-        max_risk_level: 'MEDIUM'
-      },
-
-      // ALLOWED LISTS (Empty by default - whitelist approach)
-      allowed_routes: [],
-      allowed_methods: ['GET', 'POST'],
-      allowed_dependencies: [],
-      allowed_domains: [],
-      allowed_tables: [],
-      allowed_paths: [],
-      allowed_roles: ['user']
-    };
-
-    // Parse prompt for intent customizations
-    const customizations = parsePrompt(prompt);
-    
-    console.log(`\n  🔧 Applying customizations:`);
-    if (customizations.allowNetworkCalls) {
-      defaultContract.intent_constraints.allow_external_network_calls = true;
-      defaultContract.forbidden_actions = defaultContract.forbidden_actions.filter(a => a !== 'outbound_network_calls');
-      console.log(`    - Allowing external network calls`);
+      console.log('📝 Gemini response received, length:', responseText.length);
+      
+      // Parse JSON response
+      let contract = JSON.parse(responseText);
+      
+      // Ensure required fields exist
+      contract.intent_name = intent_name || 'unnamed';
+      contract.prompt = prompt;
+      contract.version = contract.version || '1.0';
+      contract.timestamp = new Date().toISOString();
+      
+      console.log('✅ Contract generated using Gemini Pro');
+      return res.json(contract);
+    } catch (geminiErr) {
+      console.error('❌ Gemini API error type:', geminiErr.constructor.name);
+      console.error('❌ Gemini API error message:', geminiErr.message);
+      console.error('❌ Gemini API error full:', geminiErr);
+      return res.status(500).json({ error: 'Gemini API failed: ' + geminiErr.message });
     }
-    if (customizations.allowFileAccess) {
-      defaultContract.intent_constraints.allow_bulk_operations = true;
-      console.log(`    - Allowing file system access`);
-    }
-    if (customizations.allowedDomains && customizations.allowedDomains.length > 0) {
-      defaultContract.allowed_domains = customizations.allowedDomains;
-      console.log(`    - Allowed domains: ${customizations.allowedDomains.join(', ')}`);
-    }
-
-    console.log(`\n  ✅ Contract generated with defaults`);
-    console.log(`  Forbidden Actions: ${defaultContract.forbidden_actions.length}`);
-    console.log(`  Max Risk Level: ${defaultContract.intent_constraints.max_risk_level}`);
-
-    res.json(defaultContract);
-
-  } catch (error) {
-    console.log(`  ❌ Error: ${error.message}`);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error('Endpoint error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
 // ====================================================================
-// ANALYZE ENDPOINT (Enhanced)
+// ANALYZE ENDPOINT
 // ====================================================================
 app.post('/analyze', async (req, res) => {
-  console.log('\n' + '='.repeat(70));
-  console.log('🔍 POST /analyze');
-  console.log('='.repeat(70));
-
   try {
     const { code, contract } = req.body;
 
     if (!code) {
-      console.log('  ❌ Error: Missing code');
       return res.status(400).json({ error: 'Missing code' });
     }
 
     if (!contract) {
-      console.log('  ❌ Error: Missing contract');
       return res.status(400).json({ error: 'Missing contract' });
     }
 
-    console.log(`  Code length: ${code.length} chars`);
-    console.log(`  Contract: ${contract.intent_name}`);
-
     // Analyze behavior
-    console.log(`\n  → Step 1: Analyzing code semantics...`);
     const behavior = analyzeBehavior(code);
     
     // Detect drift
-    console.log(`\n  → Step 2: Detecting semantic drift...`);
     const driftResult = detectDrift(contract, behavior);
 
     // Build response
     const analysisResult = {
       safe: driftResult.safe,
       violations_count: driftResult.violations.length,
-      violations: driftResult.violations.slice(0, 10), // Top 10 violations
-      semantic_operations: behavior.semantic_operations.slice(0, 20), // Top 20 operations
+      violations: driftResult.violations.slice(0, 10),
+      semantic_operations: behavior.semantic_operations.slice(0, 20),
       risk_summary: behavior.risk_summary,
       severity_breakdown: driftResult.severity_breakdown,
       domain_summary: driftResult.domain_summary,
       analysis_timestamp: new Date().toISOString()
     };
 
-    console.log(`\n  ✅ Analysis complete`);
-    console.log(`     Safe: ${analysisResult.safe}`);
-    console.log(`     Violations: ${analysisResult.violations_count}`);
-    console.log(`     Critical: ${analysisResult.severity_breakdown.CRITICAL}`);
-    console.log(`     High: ${analysisResult.severity_breakdown.HIGH}`);
-
     res.json(analysisResult);
-
-  } catch (error) {
-    console.log(`  ❌ Error: ${error.message}`);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -171,10 +197,6 @@ app.post('/analyze', async (req, res) => {
 // VERIFY ENDPOINT (Combines generation + analysis)
 // ====================================================================
 app.post('/verify', async (req, res) => {
-  console.log('\n' + '='.repeat(70));
-  console.log('✅ POST /verify (Full Pipeline)');
-  console.log('='.repeat(70));
-
   try {
     const { code, prompt } = req.body;
 
@@ -182,12 +204,8 @@ app.post('/verify', async (req, res) => {
       return res.status(400).json({ error: 'Missing code or prompt' });
     }
 
-    console.log(`  Verifying code against intent...`);
-
-    // Step 1: Generate contract
-    console.log(`\n  → Step 1: Generating intent contract from prompt...`);
-    const contractReq = { prompt, intent_name: 'generated' };
-    let contract = {
+    // Generate contract
+    const contract = {
       intent_name: 'generated',
       prompt: prompt,
       version: '1.0',
@@ -204,16 +222,20 @@ app.post('/verify', async (req, res) => {
         allow_shell_execution: false,
         allow_external_network_calls: false,
         allow_privilege_escalation: false,
+        allow_admin_assignment: false,
         max_risk_level: 'MEDIUM'
-      }
+      },
+      allowed_routes: [],
+      allowed_methods: ['GET', 'POST'],
+      allowed_dependencies: [],
+      allowed_domains: [],
+      allowed_tables: [],
+      allowed_paths: [],
+      allowed_roles: ['user']
     };
 
-    // Step 2: Analyze code
-    console.log(`\n  → Step 2: Analyzing code semantics...`);
+    // Analyze
     const behavior = analyzeBehavior(code);
-
-    // Step 3: Detect drift
-    console.log(`\n  → Step 3: Detecting semantic drift...`);
     const driftResult = detectDrift(contract, behavior);
 
     const verifyResult = {
@@ -234,67 +256,30 @@ app.post('/verify', async (req, res) => {
       verification_timestamp: new Date().toISOString()
     };
 
-    console.log(`\n  ✅ Verification complete`);
-    console.log(`     Result: ${driftResult.safe ? 'SAFE' : 'UNSAFE'}`);
-    console.log(`     Operations: ${behavior.semantic_operations.length}`);
-    console.log(`     Violations: ${driftResult.violations.length}`);
-
     res.json(verifyResult);
-
-  } catch (error) {
-    console.log(`  ❌ Error: ${error.message}`);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// ====================================================================
-// HEALTH CHECK
-// ====================================================================
-app.get('/health', (req, res) => {
-  console.log('  ✅ Health check OK');
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+// All endpoints are POST-based (analyze, generate-contract, verify)
+// Status can be checked by making any request to /analyze
 
 // ====================================================================
 // ERROR HANDLING
 // ====================================================================
 app.use((err, req, res, next) => {
-  console.log(`\n  ❌ Unhandled error: ${err.message}`);
-  res.status(500).json({ error: err.message });
+  console.error('Caught error:', err);
+  console.error('Error stack:', err.stack);
+  res.status(500).json({ 
+    error: err.message,
+    stack: err.stack,
+    type: err.constructor.name
+  });
 });
 
 // ====================================================================
-// HELPER: Parse prompt for customizations
-// ====================================================================
-function parsePrompt(prompt) {
-  const result = {
-    allowNetworkCalls: false,
-    allowFileAccess: false,
-    allowedDomains: [],
-    allowedTables: []
-  };
-
-  const lower = prompt.toLowerCase();
-
-  if (lower.includes('network') || lower.includes('fetch') || lower.includes('http')) {
-    result.allowNetworkCalls = true;
-  }
-
-  if (lower.includes('file') || lower.includes('read') || lower.includes('write')) {
-    result.allowFileAccess = true;
-  }
-
-  // Extract domain whitelist
-  const domainMatch = prompt.match(/allow.*?domain[s]?:?\s*([a-z0-9., -]+)/i);
-  if (domainMatch) {
-    result.allowedDomains = domainMatch[1].split(/[,\s]+/).filter(d => d.length > 0);
-  }
-
-  return result;
-}
-
-// ====================================================================
-// SERVER START
+// START SERVER
 // ====================================================================
 const PORT = process.env.PORT || 3000;
 

@@ -489,22 +489,27 @@
       generateBtn.textContent = '⏳ Generating...';
 
       try {
+        console.log('Fetching from:', `${BACKEND_URL}/generate-contract`);
         const response = await fetch(`${BACKEND_URL}/generate-contract`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt })
+          body: JSON.stringify({ prompt }),
+          mode: 'cors'
         });
 
         if (!response.ok) {
-          throw new Error(`Backend error: ${response.status}`);
+          const errData = await response.text();
+          throw new Error(`Server error ${response.status}: ${errData}`);
         }
 
         currentContract = await response.json();
         contractOutput.value = JSON.stringify(currentContract, null, 2);
-        showToast('Contract generated successfully');
+        showToast('✅ Contract generated successfully');
+        console.log('Contract generated:', currentContract);
       } catch (err) {
-        showToast(`Error: ${err.message}`);
-        contractOutput.value = '';
+        console.error('Generation error:', err);
+        showToast(`❌ Failed to generate contract: ${err.message}\n\nMake sure backend is running on ${BACKEND_URL}`);
+        contractOutput.value = `Error: ${err.message}`;
         currentContract = null;
       } finally {
         generateBtn.disabled = false;
@@ -533,8 +538,8 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contract: currentContract,
-            behavior: { raw_code: code }
+            code: code,
+            contract: currentContract
           })
         });
 
@@ -564,17 +569,27 @@
         ? '<div class="status-badge safe">✅ SAFE</div>'
         : '<div class="status-badge unsafe">❌ DRIFT DETECTED</div>';
 
-      // Violations List
+      // Violations List with severity
       if (analysis.violations && analysis.violations.length > 0) {
-        violationsList.innerHTML = analysis.violations.map(v => `
-          <div class="violation-row">
-            <div class="violation-icon">⚠️</div>
+        violationsList.innerHTML = `
+          <div style="color: #00ff88; margin-bottom: 0.5rem; font-size: 0.9rem;">
+            📊 Violations: ${analysis.violations_count} | 
+            Critical: ${analysis.severity_breakdown?.CRITICAL || 0} | 
+            High: ${analysis.severity_breakdown?.HIGH || 0}
+          </div>
+        ` + analysis.violations.map(v => {
+          const severity = v.severity || 'UNKNOWN';
+          const severityColor = severity === 'CRITICAL' ? '#ff3333' : 
+                               severity === 'HIGH' ? '#ffaa00' : '#ffff00';
+          return `
+          <div class="violation-row" style="border-left: 3px solid ${severityColor};">
+            <div class="violation-icon">${severity === 'CRITICAL' ? '🔴' : severity === 'HIGH' ? '🟠' : '🟡'}</div>
             <div class="violation-content">
-              <div class="violation-type">${v.type}</div>
+              <div class="violation-type">[${severity}] ${v.type || v.domain}</div>
               <div class="violation-detail">${v.detail}</div>
             </div>
           </div>
-        `).join('');
+        `}).join('');
       } else {
         violationsList.innerHTML = '<div class="no-violations">✅ No violations detected</div>';
       }
@@ -591,13 +606,23 @@ INTENTLOCK ANALYSIS REPORT
 
 Status: ${currentAnalysis.safe ? 'SAFE' : 'DRIFT DETECTED'}
 
-Violations: ${currentAnalysis.violations?.length || 0}
-${currentAnalysis.violations?.map(v => `  - [${v.type}] ${v.detail}`).join('\n') || '  None'}
+Violations: ${currentAnalysis.violations_count || 0}
+Critical: ${currentAnalysis.severity_breakdown?.CRITICAL || 0}
+High: ${currentAnalysis.severity_breakdown?.HIGH || 0}
+Medium: ${currentAnalysis.severity_breakdown?.MEDIUM || 0}
+
+${currentAnalysis.violations?.map(v => `  - [${v.severity}] ${v.type}: ${v.detail}`).join('\n') || '  None'}
+
+Risk Summary:
+${Object.entries(currentAnalysis.risk_summary || {}).map(([k, v]) => `  ${k}: ${v}`).join('\n')}
+
+Domain Summary:
+${Object.entries(currentAnalysis.domain_summary || {}).map(([k, v]) => `  ${k}: ${v}`).join('\n')}
 
 Contract:
 ${JSON.stringify(currentContract, null, 2)}
 
-Summary: ${currentAnalysis.summary || ''}
+Timestamp: ${currentAnalysis.analysis_timestamp || new Date().toISOString()}
       `.trim();
 
       navigator.clipboard.writeText(report).then(() => {
@@ -613,7 +638,7 @@ Summary: ${currentAnalysis.summary || ''}
         timestamp: new Date().toLocaleString(),
         prompt: prompt.substring(0, 40) + (prompt.length > 40 ? '...' : ''),
         result: analysis.safe ? 'SAFE' : 'DRIFT',
-        violations: analysis.violations?.length || 0
+        violations: analysis.violations_count || 0
       });
 
       // Keep only last 50 entries
@@ -658,6 +683,22 @@ Summary: ${currentAnalysis.summary || ''}
     }
 
     // Load audit log on page load
+    console.log(`\n🔗 IntentLock Backend URL: ${BACKEND_URL}`);
+    
+    // Check if backend is available
+    fetch(`${BACKEND_URL}/generate-contract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'test' }),
+      mode: 'cors'
+    }).then(r => {
+      console.log('✅ Backend is reachable');
+    }).catch(err => {
+      console.warn(`⚠️  Backend not reachable at ${BACKEND_URL}`);
+      console.warn(`Make sure to run: cd /home/umeshwar/IntentLock && bash start.sh`);
+      showToast(`⚠️  Backend not running at ${BACKEND_URL}`);
+    });
+    
     updateAuditDisplay();
   </script>
 </body>

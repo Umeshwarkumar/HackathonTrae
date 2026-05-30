@@ -60,7 +60,7 @@ class GenerateContractRequest(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     contract: dict
-    behavior: dict
+    code: str
 
 class HealthResponse(BaseModel):
     status: str
@@ -73,8 +73,10 @@ class GenerateContractResponse(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     violations: list
+    violations_count: int
     safe: bool
     drift_report: str
+    severity_breakdown: dict
 
 class AuditLogRequest(BaseModel):
     prompt: str
@@ -163,97 +165,65 @@ Return ONLY valid JSON, no explanation, no markdown."""
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(request: AnalyzeRequest):
     """
-    Analyze behavior against an intent contract to detect violations.
-    
-    Args:
-        request: Contains the contract and behavior to compare
-        
-    Returns:
-        Analysis results with violations, safety status, and drift report
+    Analyze code against an intent contract to detect violations.
     """
     try:
         contract = request.contract
-        behavior = request.behavior
+        code = request.code
         
         violations = []
-        drift_report = ""
         safe = True
+        severity_breakdown = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
         
         # Extract forbidden actions from contract
         forbidden_actions = contract.get("forbidden_actions", [])
         
-        # Check behavior against forbidden actions
-        if "actions_performed" in behavior:
-            for action in behavior["actions_performed"]:
-                if action in forbidden_actions:
-                    violations.append(f"Forbidden action performed: {action}")
-                    safe = False
+        # Pattern matching for forbidden actions
+        patterns = {
+            "outbound_network_calls": ["fetch(", "axios", "request(", "http.request", "https.request", ".post(", ".get("],
+            "file_system_access": ["fs.", "readFile", "writeFile", "unlink", "mkdir"],
+            "child_process_execution": ["exec(", "spawn(", "fork(", "execFile"],
+            "hardcoded_secrets": ["password", "secret", "api_key", "token"],
+            "unauthorized_db_access": ["SELECT", "INSERT", "UPDATE", "DELETE", "DROP"]
+        }
         
-        # Check routes
-        allowed_routes = contract.get("allowed_routes", [])
-        if "routes_accessed" in behavior:
-            for route in behavior["routes_accessed"]:
-                if route not in allowed_routes:
-                    violations.append(f"Unauthorized route accessed: {route}")
-                    safe = False
+        # Check code for violations and assign severity
+        severity_map = {
+            "outbound_network_calls": "CRITICAL",
+            "file_system_access": "HIGH",
+            "child_process_execution": "CRITICAL",
+            "hardcoded_secrets": "CRITICAL",
+            "unauthorized_db_access": "HIGH"
+        }
         
-        # Check methods
-        allowed_methods = contract.get("allowed_methods", [])
-        if "methods_used" in behavior:
-            for method in behavior["methods_used"]:
-                if method not in allowed_methods:
-                    violations.append(f"Unauthorized HTTP method used: {method}")
-                    safe = False
+        for action, pattern_list in patterns.items():
+            if action in forbidden_actions:
+                for pattern in pattern_list:
+                    if pattern.lower() in code.lower():
+                        severity = severity_map.get(action, "MEDIUM")
+                        violations.append({
+                            "type": action,
+                            "detail": f"Found '{pattern}'",
+                            "severity": severity
+                        })
+                        severity_breakdown[severity] += 1
+                        safe = False
+                        break
         
-        # Check dependencies
-        allowed_dependencies = contract.get("allowed_dependencies", [])
-        if "dependencies_used" in behavior:
-            for dep in behavior["dependencies_used"]:
-                if dep not in allowed_dependencies:
-                    violations.append(f"Unauthorized dependency used: {dep}")
-                    safe = False
-        
-        # Check for forbidden file system access
-        if "file_system_access" in forbidden_actions and behavior.get("fs_access"):
-            violations.append("Forbidden action: file system access detected")
-            safe = False
-        
-        # Check for forbidden network calls
-        if "outbound_network_calls" in forbidden_actions and behavior.get("network_calls"):
-            violations.append("Forbidden action: outbound network calls detected")
-            safe = False
-        
-        # Check for forbidden child process execution
-        if "child_process_execution" in forbidden_actions and behavior.get("child_process"):
-            violations.append("Forbidden action: child process execution detected")
-            safe = False
-        
-        # Check for hardcoded secrets
-        if "hardcoded_secrets" in forbidden_actions and behavior.get("hardcoded_secrets"):
-            violations.append("Forbidden action: hardcoded secrets detected")
-            safe = False
-        
-        # Check for unauthorized database access
-        if "unauthorized_db_access" in forbidden_actions and behavior.get("db_queries"):
-            violations.append("Forbidden action: unauthorized database access detected")
-            safe = False
-        
-        # Generate drift report
-        if violations:
-            drift_report = f"Found {len(violations)} violation(s): " + " | ".join(violations)
-        else:
-            drift_report = "No violations detected. Behavior is in compliance with contract."
+        drift_report = f"Code Analysis: {len(violations)} violations found"
         
         return {
             "violations": violations,
+            "violations_count": len(violations),
             "safe": safe,
-            "drift_report": drift_report
+            "drift_report": drift_report,
+            "severity_breakdown": severity_breakdown
         }
         
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error analyzing behavior: {str(e)}"
+            detail=f"Error analyzing code: {str(e)}"
         )
 
 
@@ -372,4 +342,4 @@ async def clear_audit_log():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=3000)
