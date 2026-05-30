@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IntentLock - AI Code Intent Verifier</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background-color: #0d0d1a;
+      color: #e0e0e0;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Header */
+    .header {
+      background-color: #0d0d1a;
+      border-bottom: 2px solid #2a2a4a;
+      padding: 2rem;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      color: #ffffff;
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      font-size: 1rem;
+      color: #b0b0b0;
+      letter-spacing: 1px;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    /* Section Titles */
+    .section-title {
+      font-size: 1.3rem;
+      color: #00ff88;
+      margin-bottom: 1rem;
+      margin-top: 2rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    /* Input Panel */
+    .input-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .input-column {
+      background-color: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      padding: 1.5rem;
+    }
+
+    .input-column label {
+      display: block;
+      font-size: 0.9rem;
+      color: #00ff88;
+      margin-bottom: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 200px;
+      background-color: #0d0d1a;
+      border: 1px solid #2a2a4a;
+      border-radius: 4px;
+      padding: 1rem;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      resize: vertical;
+      margin-bottom: 1rem;
+    }
+
+    textarea::placeholder {
+      color: #555555;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #00ff88;
+      box-shadow: 0 0 8px rgba(0, 255, 136, 0.2);
+    }
+
+    textarea:disabled {
+      background-color: #0d0d1a;
+      cursor: not-allowed;
+      color: #666666;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 1rem;
+    }
+
+    button {
+      flex: 1;
+      padding: 0.8rem 1.5rem;
+      background-color: #00ff88;
+      color: #0d0d1a;
+      border: none;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #00dd66;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      background-color: #555555;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    button.secondary {
+      background-color: #2a2a4a;
+      color: #e0e0e0;
+    }
+
+    button.secondary:hover {
+      background-color: #3a3a5a;
+    }
+
+    .loading {
+      display: inline-block;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Drift Report Panel */
+    .drift-report {
+      display: none;
+      background-color: #1a1a2e;
+      border: 2px solid #2a2a4a;
+      border-radius: 8px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      animation: fadeIn 0.5s ease;
+    }
+
+    .drift-report.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .status-badge {
+      display: inline-block;
+      font-size: 1.5rem;
+      font-weight: bold;
+      padding: 0.8rem 1.5rem;
+      border-radius: 4px;
+      margin-bottom: 1.5rem;
+      letter-spacing: 1px;
+    }
+
+    .status-badge.safe {
+      background-color: rgba(0, 255, 136, 0.2);
+      color: #00ff88;
+      border: 2px solid #00ff88;
+    }
+
+    .status-badge.unsafe {
+      background-color: rgba(255, 68, 68, 0.2);
+      color: #ff4444;
+      border: 2px solid #ff4444;
+    }
+
+    .violations-list {
+      margin-bottom: 1.5rem;
+    }
+
+    .violation-row {
+      display: flex;
+      align-items: flex-start;
+      background-color: #0d0d1a;
+      border-left: 3px solid #ff4444;
+      padding: 1rem;
+      margin-bottom: 0.8rem;
+      border-radius: 4px;
+    }
+
+    .violation-icon {
+      font-size: 1.2rem;
+      margin-right: 1rem;
+      min-width: 1.5rem;
+    }
+
+    .violation-content {
+      flex: 1;
+    }
+
+    .violation-type {
+      color: #ff4444;
+      font-weight: bold;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      margin-bottom: 0.3rem;
+    }
+
+    .violation-detail {
+      color: #b0b0b0;
+      font-size: 0.85rem;
+    }
+
+    .no-violations {
+      color: #00ff88;
+      padding: 1rem;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .contract-code {
+      background-color: #0d0d1a;
+      border: 1px solid #2a2a4a;
+      border-radius: 4px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      overflow-x: auto;
+      max-height: 300px;
+    }
+
+    .contract-code pre {
+      color: #00ff88;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .report-actions {
+      display: flex;
+      gap: 1rem;
+    }
+
+    /* Audit Log Panel */
+    .audit-log {
+      background-color: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .audit-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+
+    .audit-table thead {
+      border-bottom: 2px solid #2a2a4a;
+    }
+
+    .audit-table th {
+      text-align: left;
+      padding: 0.8rem;
+      color: #00ff88;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .audit-table td {
+      padding: 0.8rem;
+      border-bottom: 1px solid #2a2a4a;
+      font-size: 0.85rem;
+    }
+
+    .audit-table tr:hover {
+      background-color: #0d0d1a;
+    }
+
+    .audit-empty {
+      text-align: center;
+      padding: 2rem;
+      color: #555555;
+    }
+
+    .audit-controls {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .input-panel {
+        grid-template-columns: 1fr;
+      }
+
+      .header h1 {
+        font-size: 1.8rem;
+      }
+
+      .audit-table {
+        font-size: 0.75rem;
+      }
+
+      .audit-table th,
+      .audit-table td {
+        padding: 0.5rem;
+      }
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background-color: #00ff88;
+      color: #0d0d1a;
+      padding: 1rem 1.5rem;
+      border-radius: 4px;
+      font-weight: bold;
+      animation: slideIn 0.3s ease, slideOut 3s ease 2.7s forwards;
+      z-index: 1000;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>🔐 IntentLock</h1>
+    <p>AI Code Intent Verifier</p>
+  </div>
+
+  <!-- Main Container -->
+  <div class="container">
+    <!-- Input Panel -->
+    <div class="section-title">Input & Analysis</div>
+    <div class="input-panel">
+      <!-- Left Column: Intent Prompt -->
+      <div class="input-column">
+        <label for="promptInput">Intent Prompt</label>
+        <textarea id="promptInput" placeholder="e.g. Create a login API with Express"></textarea>
+        <button id="generateBtn">Generate Contract</button>
+        <label for="contractOutput" style="margin-top: 1rem;">Generated Contract</label>
+        <textarea id="contractOutput" disabled placeholder="Contract will appear here..."></textarea>
+      </div>
+
+      <!-- Right Column: AI-Generated Code -->
+      <div class="input-column">
+        <label for="codeInput">AI-Generated Code</label>
+        <textarea id="codeInput" placeholder="Paste the AI-generated code here"></textarea>
+        <button id="analyzeBtn">Analyze for Drift</button>
+      </div>
+    </div>
+
+    <!-- Drift Report Panel -->
+    <div class="section-title">Analysis Results</div>
+    <div class="drift-report" id="driftReport">
+      <div id="statusBadge"></div>
+      
+      <div class="violations-list" id="violationsList"></div>
+      
+      <label style="display: block; margin-top: 1.5rem; color: #00ff88;">Contract JSON</label>
+      <div class="contract-code">
+        <pre id="contractJSON"></pre>
+      </div>
+
+      <div class="report-actions">
+        <button class="secondary" id="copyReportBtn">📋 Copy Report</button>
+      </div>
+    </div>
+
+    <!-- Audit Log Panel -->
+    <div class="section-title">Audit Log</div>
+    <div class="audit-log">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Prompt (first 40 chars)</th>
+            <th>Result</th>
+            <th>Violations</th>
+          </tr>
+        </thead>
+        <tbody id="auditLogBody">
+          <tr>
+            <td colspan="4" class="audit-empty">No analysis records yet</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="audit-controls">
+        <button class="secondary" id="clearLogBtn">Clear Log</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const BACKEND_URL = 'http://localhost:3000';
+    const AUDIT_LOG_KEY = 'intentlock_audit_log';
+
+    // UI Elements
+    const promptInput = document.getElementById('promptInput');
+    const contractOutput = document.getElementById('contractOutput');
+    const codeInput = document.getElementById('codeInput');
+    const generateBtn = document.getElementById('generateBtn');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const driftReport = document.getElementById('driftReport');
+    const statusBadge = document.getElementById('statusBadge');
+    const violationsList = document.getElementById('violationsList');
+    const contractJSON = document.getElementById('contractJSON');
+    const copyReportBtn = document.getElementById('copyReportBtn');
+    const auditLogBody = document.getElementById('auditLogBody');
+    const clearLogBtn = document.getElementById('clearLogBtn');
+
+    let currentContract = null;
+    let currentAnalysis = null;
+
+    // Generate Contract
+    generateBtn.addEventListener('click', async () => {
+      const prompt = promptInput.value.trim();
+      if (!prompt) {
+        showToast('Please enter a prompt');
+        return;
+      }
+
+      generateBtn.disabled = true;
+      generateBtn.textContent = '⏳ Generating...';
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/generate-contract`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Backend error: ${response.status}`);
+        }
+
+        currentContract = await response.json();
+        contractOutput.value = JSON.stringify(currentContract, null, 2);
+        showToast('Contract generated successfully');
+      } catch (err) {
+        showToast(`Error: ${err.message}`);
+        contractOutput.value = '';
+        currentContract = null;
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Generate Contract';
+      }
+    });
+
+    // Analyze for Drift
+    analyzeBtn.addEventListener('click', async () => {
+      if (!currentContract) {
+        showToast('Generate a contract first');
+        return;
+      }
+
+      const code = codeInput.value.trim();
+      if (!code) {
+        showToast('Please paste code to analyze');
+        return;
+      }
+
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = '⏳ Analyzing...';
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contract: currentContract,
+            behavior: { raw_code: code }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Backend error: ${response.status}`);
+        }
+
+        currentAnalysis = await response.json();
+        displayDriftReport(currentAnalysis);
+        addAuditLog(promptInput.value, currentAnalysis);
+        showToast('Analysis complete');
+      } catch (err) {
+        showToast(`Error: ${err.message}`);
+      } finally {
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = 'Analyze for Drift';
+      }
+    });
+
+    // Display Drift Report
+    function displayDriftReport(analysis) {
+      driftReport.classList.add('active');
+
+      // Status Badge
+      const isSafe = analysis.safe;
+      statusBadge.innerHTML = isSafe
+        ? '<div class="status-badge safe">✅ SAFE</div>'
+        : '<div class="status-badge unsafe">❌ DRIFT DETECTED</div>';
+
+      // Violations List
+      if (analysis.violations && analysis.violations.length > 0) {
+        violationsList.innerHTML = analysis.violations.map(v => `
+          <div class="violation-row">
+            <div class="violation-icon">⚠️</div>
+            <div class="violation-content">
+              <div class="violation-type">${v.type}</div>
+              <div class="violation-detail">${v.detail}</div>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        violationsList.innerHTML = '<div class="no-violations">✅ No violations detected</div>';
+      }
+
+      // Contract JSON
+      contractJSON.textContent = JSON.stringify(currentContract, null, 2);
+    }
+
+    // Copy Report to Clipboard
+    copyReportBtn.addEventListener('click', () => {
+      const report = `
+INTENTLOCK ANALYSIS REPORT
+==========================
+
+Status: ${currentAnalysis.safe ? 'SAFE' : 'DRIFT DETECTED'}
+
+Violations: ${currentAnalysis.violations?.length || 0}
+${currentAnalysis.violations?.map(v => `  - [${v.type}] ${v.detail}`).join('\n') || '  None'}
+
+Contract:
+${JSON.stringify(currentContract, null, 2)}
+
+Summary: ${currentAnalysis.summary || ''}
+      `.trim();
+
+      navigator.clipboard.writeText(report).then(() => {
+        showToast('Report copied to clipboard');
+      });
+    });
+
+    // Audit Log
+    function addAuditLog(prompt, analysis) {
+      let logs = JSON.parse(localStorage.getItem(AUDIT_LOG_KEY) || '[]');
+      
+      logs.unshift({
+        timestamp: new Date().toLocaleString(),
+        prompt: prompt.substring(0, 40) + (prompt.length > 40 ? '...' : ''),
+        result: analysis.safe ? 'SAFE' : 'DRIFT',
+        violations: analysis.violations?.length || 0
+      });
+
+      // Keep only last 50 entries
+      logs = logs.slice(0, 50);
+      localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(logs));
+
+      updateAuditDisplay();
+    }
+
+    function updateAuditDisplay() {
+      const logs = JSON.parse(localStorage.getItem(AUDIT_LOG_KEY) || '[]');
+
+      if (logs.length === 0) {
+        auditLogBody.innerHTML = '<tr><td colspan="4" class="audit-empty">No analysis records yet</td></tr>';
+      } else {
+        auditLogBody.innerHTML = logs.map(log => `
+          <tr>
+            <td>${log.timestamp}</td>
+            <td>${log.prompt}</td>
+            <td>${log.result === 'SAFE' ? '✅ SAFE' : '❌ DRIFT'}</td>
+            <td>${log.violations}</td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    clearLogBtn.addEventListener('click', () => {
+      if (confirm('Are you sure you want to clear the audit log?')) {
+        localStorage.removeItem(AUDIT_LOG_KEY);
+        updateAuditDisplay();
+        showToast('Audit log cleared');
+      }
+    });
+
+    // Toast Notification
+    function showToast(message) {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    // Load audit log on page load
+    updateAuditDisplay();
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{
+  "name": "intentlock",
+  "version": "2.1.0",
+  "description": "AI-powered code intent verification system with ArmorIQ governance integration",
+  "main": "scripts/verify-intent.js",
+  "scripts": {
+    "verify": "node scripts/verify-intent.js",
+    "test:analyzer": "node analyzer/analyzer.js",
+    "test:detector": "node analyzer/driftDetector.js",
+    "test:all": "npm run test:analyzer && npm run test:detector"
+  },
+  "keywords": [
+    "intent-verification",
+    "code-analysis",
+    "security",
+    "drift-detection",
+    "governance",
+    "armoriq"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@armoriq/sdk": "^0.3.3",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "type": "commonjs"
+}
